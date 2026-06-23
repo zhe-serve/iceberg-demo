@@ -1,0 +1,12 @@
+services:
+  spark:
+    build: .
+    user: root
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - SPARK_HOME=/opt/spark
+    volumes:
+      - .:/app
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
+    working_dir: /app
+    command: sleep infinity
