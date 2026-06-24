@@ -5,14 +5,15 @@ Writes a partitioned Iceberg table to GCS using Spark and the [BigLake Iceberg R
 ## Architecture
 
 ```
-PySpark (Docker)
+PySpark (Podman)
   └─ Iceberg REST Catalog  ──►  BigLake Metastore API
   └─ HadoopFileIO + GCS Connector  ──►  GCS bucket (Parquet files)
 ```
 
 ## Prerequisites
 
-- Docker Desktop
+- [Podman Desktop](https://podman-desktop.io/) with the Docker engine running. Podman Desktop has a more favorable terms and conditions than Docker Desktop. Colima is another option.
+- `docker-compose` (activate the plugin on Podman Desktop)
 - `gcloud` CLI authenticated
 - A GCP project with billing enabled
 
@@ -27,13 +28,19 @@ gcloud services enable biglake.googleapis.com storage.googleapis.com \
 
 ### 2. Create a GCS bucket
 
+The bucket name becomes your catalog name and the value of `CATALOG` in the script. Choose it once and use it consistently.
+
 ```bash
-gcloud storage buckets create gs://YOUR_BUCKET \
+gcloud storage buckets create gs://YOUR_CATALOG \
   --location=us-central1 \
   --project=YOUR_PROJECT
 ```
 
+> The bucket and catalog must be in the same region.
+
 ### 3. Create a BigLake Iceberg catalog
+
+A `CATALOG_TYPE_GCS_BUCKET` catalog is backed by a GCS bucket of the same name. The `gcloud biglake iceberg catalogs create` command links them automatically.
 
 ```bash
 gcloud biglake iceberg catalogs create YOUR_CATALOG \
@@ -41,33 +48,44 @@ gcloud biglake iceberg catalogs create YOUR_CATALOG \
   --project=YOUR_PROJECT
 ```
 
-The catalog name must match your bucket name (BigLake links them automatically for `CATALOG_TYPE_GCS_BUCKET` catalogs).
+Verify it was created:
+
+```bash
+gcloud biglake iceberg catalogs list \
+  --location=us-central1 \
+  --project=YOUR_PROJECT
+```
 
 ### 4. IAM roles
 
-Grant your user account the following roles on the project:
+Grant your user account the following roles:
 
 ```bash
+# Create/read/write BigLake catalog resources (namespaces, tables)
 gcloud projects add-iam-policy-binding YOUR_PROJECT \
   --member="user:YOU@example.com" \
   --role="roles/biglake.admin"
 
+# Required to bill API calls to your project via x-goog-user-project header
 gcloud projects add-iam-policy-binding YOUR_PROJECT \
   --member="user:YOU@example.com" \
   --role="roles/serviceusage.serviceUsageConsumer"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT \
+# Write Parquet files to the GCS bucket (scoped to the bucket)
+gcloud storage buckets add-iam-policy-binding gs://YOUR_CATALOG \
   --member="user:YOU@example.com" \
   --role="roles/storage.objectAdmin"
 ```
 
-`serviceusage.serviceUsageConsumer` is required because the script bills API calls to your project via the `x-goog-user-project` header.
+IAM changes can take a few minutes to propagate.
 
 ### 5. Authenticate
 
 ```bash
 gcloud auth application-default login
 ```
+
+This stores user credentials that the Docker container reads at runtime via the mounted gcloud config directory.
 
 ## Configuration
 
